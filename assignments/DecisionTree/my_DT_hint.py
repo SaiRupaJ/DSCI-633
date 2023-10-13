@@ -18,26 +18,23 @@ class my_DT:
 
 
     def impurity(self, labels):
-        # Calculate impurity (unweighted)
-        # Input is a list (or np.array) of labels
-        # Output impurity score
         stats = Counter(labels)
         N = float(len(labels))
         if self.criterion == "gini":
-            # Implement gini impurity
-
-
-
-
+            impurity = 1.0
+            for label in self.classes_:
+                p_label = stats[label] / N
+                impurity -= p_label ** 2
         elif self.criterion == "entropy":
-            # Implement entropy impurity
-
-
-
-
+            impurity = 0.0
+            for label in self.classes_:
+                p_label = stats[label] / N
+                if p_label > 0:
+                    impurity -= p_label * np.log2(p_label)
         else:
-            raise Exception("Unknown criterion.")
-        return impure
+             raise Exception("Unknown criterion.")
+        return impurity
+
 
     def find_best_split(self, pop, X, labels):
         # Find the best split
@@ -122,21 +119,15 @@ class my_DT:
         return predictions
 
     def predict_proba(self, X):
-        # X: pd.DataFrame, independent variables, float
-        # Eample:
-        # self.classes_ = {"2", "1"}
-        # the reached node for the test data point has {"1":2, "2":1}
-        # then the prob for that data point is {"2": 1/3, "1": 2/3}
-        # return probs = pd.DataFrame(list of prob, columns = self.classes_)
-
         predictions = []
         for i in range(len(X)):
             node = 0
             while True:
-                if type(self.tree[node]) == Counter:               
-                    # Calculate prediction probabilities for data point arriving at the leaf node.
-                    # predictions = list of prob, e.g. prob = {"2": 1/3, "1": 2/3}
-                    prob = {"write your own code"}
+                if type(self.tree[node]) == Counter:
+                # Calculate prediction probabilities for data point arriving at the leaf node.
+                    label_counts = self.tree[node]
+                    total_count = sum(label_counts.values())
+                    prob = {label: count / total_count for label, count in label_counts.items()}
                     predictions.append(prob)
                     break
                 else:
