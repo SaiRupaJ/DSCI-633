@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from pdb import set_trace
 
 
 class my_GA:
@@ -47,8 +48,19 @@ class my_GA:
         # Randomly generate generation_size points to self.generation
         # If boundary in self.decision_boundary is integer, the generated
         #  value must also be integer.
-        # write your own code below
 
+        self.generation = []
+        for _ in range(self.generation_size):
+            x = []
+            for boundary in self.decision_boundary:
+                if type(boundary) == list:
+                    val = np.random.random() * (boundary[1] - boundary[0]) + boundary[0]
+                    if type(boundary[0]) == int:
+                        val = round(val)
+                    x.append(val)
+                else:
+                    x.append(boundary[np.random.randint(len(boundary))])
+            self.generation.append(tuple(x))
         ######################
         # check if size of generation is correct
         assert (len(self.generation) == self.generation_size)
@@ -60,10 +72,40 @@ class my_GA:
         # Avoid repetitive evaluations
         if decision not in self.evaluated:
             # evaluate with self.crossval_fold fold cross-validation on self.data_X and self.data_y
-            clf = self.model(*decision)
-            # write your own code below
-            objs = self.obj_func(predictions, actuals, pred_proba)
-            ######################
+            dec_dict = {key: decision[i] for i, key in enumerate(self.decision_keys)}
+            clf = self.model(**dec_dict)
+          
+
+            # Cross validation:
+            indices = np.arange(len(self.data_y))
+            np.random.shuffle(indices)
+            size = int(np.ceil(len(self.data_y) / float(self.crossval_fold)))
+            objs_crossval = []
+            for fold in range(self.crossval_fold):
+                start = int(fold * size)
+                end = start + size
+                test_indices = indices[start:end]
+                train_indices = list(set(indices) - set(test_indices))
+                X_train = self.data_X.loc[train_indices]
+                X_train.index = range(len(X_train))
+                X_test = self.data_X.loc[test_indices]
+                X_test.index = range(len(X_test))
+                y_train = self.data_y.loc[train_indices]
+                y_train.index = range(len(y_train))
+                y_test = self.data_y.loc[test_indices]
+                y_test.index = range(len(y_test))
+                clf.fit(X_train, y_train)
+                predictions = clf.predict(X_test)  
+                try:
+                    pred_proba = clf.predict_proba(X_test)
+                except:
+                    pred_proba = None
+                actuals = y_test
+                objs = np.array(self.obj_func(predictions.tolist(), actuals.tolist(), pred_proba.tolist()))
+                objs_crossval.append(objs)
+            # Take a mean of each fold of the cross validation result
+            # objs_crossval should become an 1-d array of the same size as objs
+            objs_crossval = np.mean(objs_crossval, axis=0)
             self.evaluated[decision] = objs_crossval
         return self.evaluated[decision]
 
@@ -77,36 +119,62 @@ class my_GA:
         obj_a = self.evaluate(a)
         obj_b = self.evaluate(b)
         # write your own code below
+        if all(obj_a[i] >= obj_b[i] for i in range(len(obj_a))):
+
+            return 1
+        else:
+            return -1
 
     def compete(self, pf_new, pf_best):
         # Compare and merge two pareto frontiers
         # If one point y in pf_best is binary dominated by another point x in pf_new
-            # (exist x and y; self.is_better(x, y) == 1)
-            # replace that point y in pf_best with the point x in pf_new
+        # (exist x and y; self.is_better(x, y) == 1)
+        # replace that point y in pf_best with the point x in pf_new
         # If one point x in pf_new is not dominated by any point y in pf_best (and does not exist in pf_best)
-            # (forall y in pf_best; self.is_better(y, x) == -1)
-            # add that point x to pf_best
+        # (forall y in pf_best; self.is_better(y, x) == -1)
+        # add that point x to pf_best
         # Return True if pf_best is modified in the process, otherwise return False
         # Write your own code below
-
+        modified = False
+        for i in range(len(pf_best)):
+            for j in range(len(pf_new)):
+                if self.is_better(pf_new[j], pf_best[i]) == 1:
+                    pf_best[i] = pf_new[j]
+                    pf_new.pop(j)
+                    modified = True
+                    break
+        to_add = []
+        for j in range(len(pf_new)):
+            not_dominated = True
+            for i in range(len(pf_best)):
+                if self.is_better(pf_new[j], pf_best[i]) == 1:
+                    not_dominated = False
+                    break
+            if not_dominated:
+                to_add.append(j)
+                modified = True
+        for j in to_add:
+            pf_best.append(pf_new[j])
         return modified
 
     def select(self):
         # Select which points will survive based on the objectives
         # Update the following:
-            # self.pf = pareto frontier (undominated points from self.generation)
-            # self.generation = survived points
+        # self.pf = pareto frontier (undominated points from self.generation)
+        # self.generation = survived points
 
         # single-objective:
-        if len(self.evaluate(self.generation[0]))==1:
-            selected = np.argsort([self.evaluate(x)[0] for x in self.generation])[::-1][:int(np.ceil(self.selection_rate * self.generation_size))]
+        if len(self.evaluate(self.generation[0])) == 1:
+            indices = np.arange(len(self.data_y))
+            selected = np.argsort([self.evaluate(x)[0] for x in self.generation])[::-1][
+                       :int(np.ceil(self.selection_rate * self.generation_size))]
             self.pf = [self.generation[selected[0]]]
             self.generation = [self.generation[i] for i in selected]
         # multi-objective:
         else:
             self.pf = []
             for x in self.generation:
-                if not np.array([self.is_better(y,x)==1 for y in self.generation]).any():
+                if not np.array([self.is_better(y, x) == 1 for y in self.generation]).any():
                     self.pf.append(x)
             # remove duplicates
             self.pf = list(set(self.pf))
@@ -122,13 +190,28 @@ class my_GA:
             else:
                 self.generation = self.pf[:]
 
-
     def crossover(self):
         # randomly select two points in self.generation
         # and generate a new point
         # repeat until self.generation_size points were generated
         # Write your own code below
+        
 
+        def cross(a, b):
+            new_point = []
+            for i in range(len(a)):
+                if np.random.random() < 0.5:
+                    new_point.append(a[i])
+                else:
+                    new_point.append(b[i])
+            return tuple(new_point)
+
+        to_add = []
+        for _ in range(self.generation_size - len(self.generation)):
+            ids = np.random.choice(len(self.generation), 2, replace=False)
+            new_point = cross(self.generation[ids[0]], self.generation[ids[1]])
+            to_add.append(new_point)
+        self.generation.extend(to_add)
         ######################
         # check if size of generation is correct
         assert (len(self.generation) == self.generation_size)
@@ -142,10 +225,22 @@ class my_GA:
         # If boundary in self.decision_boundary is integer, the mutated
         #  value must also be integer.
         # write your own code below
+        for i, x in enumerate(self.generation):
+            new_x = list(x)
+            for j in range(len(x)):
+                if np.random.random() < self.mutation_rate:
+                    boundary = self.decision_boundary[j]
+                    if isinstance(boundary[0], (int, float)) and isinstance(boundary[1], (int, float)):
+                        val = np.random.random() * (float(boundary[1]) - float(boundary[0])) + float(boundary[0])
+                        if isinstance(boundary[0], int):
+                            val = round(val)
+                        new_x[j] = val
 
-
+            self.generation[i] = tuple(new_x)
         return self.generation
+        
 
+        
     def tune(self):
         # Main function of my_GA
         # Stop when self.iter == self.max_generation or self.life == 0
