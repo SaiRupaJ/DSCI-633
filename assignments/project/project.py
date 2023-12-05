@@ -22,7 +22,7 @@ class my_model():
         data_X['final'] = data_X['final'].str.replace('[^a-zA-Z]', ' ')
 
         # Vectorizing
-        self.tfidf = TfidfVectorizer(stop_words='english', norm='l2', use_idf=False, smooth_idf=False)
+        self.tfidf = TfidfVectorizer(stop_words='english')
         final_vectorized = self.tfidf.fit_transform(data_X['final'].astype('U'))
 
         params = {
